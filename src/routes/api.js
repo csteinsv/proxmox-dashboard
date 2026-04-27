@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getNodes, getNodeStatus, getAllVMs } from '../proxmox.js';
+import { getNodes, getNodeStatus, getAllVMs, getRecentTasks } from '../proxmox.js';
 import { evaluateVM } from '../alerts.js';
 
 const router = Router();
@@ -25,6 +25,30 @@ router.get('/vms', async (req, res, next) => {
     vms.sort((a, b) => a.vmid - b.vmid);
     const withAlerts = vms.map(vm => ({ ...vm, alert: evaluateVM(vm) }));
     res.json(withAlerts);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/tasks', async (req, res, next) => {
+  try {
+    const nodes = await getNodes();
+    // One representative node per cluster (first listed)
+    const seen = new Set();
+    const representatives = [];
+    for (const n of nodes) {
+      if (!seen.has(n.cluster)) {
+        seen.add(n.cluster);
+        representatives.push({ cluster: n.cluster, node: n.node });
+      }
+    }
+    const results = await Promise.all(
+      representatives.map(async ({ cluster, node }) => {
+        const tasks = await getRecentTasks(node, cluster);
+        return { cluster, node, tasks };
+      })
+    );
+    res.json(results);
   } catch (err) {
     next(err);
   }

@@ -112,6 +112,12 @@ async function getNodeVMs(c, n) {
   );
 }
 
+export async function getRecentTasks(node, cluster) {
+  const c = getClusters().find(c => c.label === cluster);
+  if (!c) return [];
+  return c.api(`/nodes/${node}/tasks?limit=20`).catch(() => []);
+}
+
 export async function getNodes() {
   const results = await Promise.all(
     getClusters().map(async c => {

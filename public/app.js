@@ -91,14 +91,22 @@ function renderVMsGrouped(vms) {
     groups.get(key).vms.push(vm);
   }
   if (groups.size === 0) return '<p class="loading">No running VMs.</p>';
-  return [...groups.values()].map(g => `
-    <div class="node-group">
-      <div class="node-group-header">
-        <span class="node-group-name">${g.node}</span>
-        <span class="node-cluster-badge">${g.cluster}</span>
-      </div>
-      <div class="card-grid">${g.vms.map(vmCard).join('')}</div>
-    </div>`).join('');
+  return [...groups.values()].map(g => {
+    const mid  = Math.ceil(g.vms.length / 2);
+    const colA = g.vms.slice(0, mid);
+    const colB = g.vms.slice(mid);
+    return `
+      <div class="node-group">
+        <div class="node-group-header">
+          <span class="node-group-name">${g.node}</span>
+          <span class="node-cluster-badge">${g.cluster}</span>
+        </div>
+        <div class="node-group-cols">
+          <div class="card-grid">${colA.map(vmCard).join('')}</div>
+          <div class="card-grid">${colB.map(vmCard).join('')}</div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
 function renderAlertsPanel(vms) {
@@ -131,11 +139,35 @@ function renderAlertsPanel(vms) {
   list.innerHTML = rows.map(r => r.html).join('');
 }
 
+function fmtTaskTime(ts) {
+  const d = new Date(ts * 1000);
+  const now = new Date();
+  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  if (d.toDateString() === now.toDateString()) return time;
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ' ' + time;
+}
+
+function renderLogPanel(tasks) {
+  if (!tasks.length) return '<div class="log-row log-empty">No tasks found</div>';
+  return tasks.map(t => {
+    const statusCls = !t.status ? 'running' : t.status === 'OK' ? 'ok' : 'err';
+    const statusTxt = t.status || 'running';
+    const vmRef     = t.id ? `<span class="log-vmid">${t.id}</span>` : '';
+    return `<div class="log-row">
+      <span class="log-time">${fmtTaskTime(t.starttime)}</span>
+      <span class="log-type">${t.type}</span>
+      ${vmRef}
+      <span class="log-status ${statusCls}">${statusTxt}</span>
+    </div>`;
+  }).join('');
+}
+
 async function refresh() {
   try {
-    const [nodes, vms] = await Promise.all([
+    const [nodes, vms, taskClusters] = await Promise.all([
       fetch('/api/nodes').then(r => r.json()),
       fetch('/api/vms').then(r => r.json()),
+      fetch('/api/tasks').then(r => r.json()),
     ]);
 
     vms.sort((a, b) => a.vmid - b.vmid);
@@ -144,6 +176,16 @@ async function refresh() {
     renderAlertsPanel(vms);
     document.getElementById('nodes').innerHTML = nodes.map(nodeCard).join('');
     document.getElementById('vms').innerHTML   = renderVMsGrouped(vms);
+
+    for (const { cluster, tasks } of taskClusters) {
+      const panel = document.getElementById(`log-${cluster}`);
+      if (panel) {
+        panel.querySelector('.log-header').textContent =
+          cluster === 'pve' ? 'PVE1 — Recent Tasks' : 'PVE2 — Recent Tasks';
+        panel.querySelector('.log-body').innerHTML = renderLogPanel(tasks);
+      }
+    }
+
     document.getElementById('last-updated').textContent =
       'Updated ' + new Date().toLocaleTimeString();
   } catch (e) {
