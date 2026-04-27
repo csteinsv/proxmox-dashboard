@@ -127,3 +127,17 @@ h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; col
 .backup-status.green  { color: #48bb78; }
 .backup-status.yellow { color: #ecc94b; }
 .backup-status.red    { color: #fc8181; }
+
+.header-controls { display: flex; align-items: center; gap: 1rem; }
+.toggle-btn {
+  font-size: 0.75rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 5px;
+  border: 1px solid #4a5568;
+  background: #2d3748;
+  color: #e2e8f0;
+  cursor: pointer;
+  letter-spacing: 0.02em;
+  transition: background 0.15s;
+}
+.toggle-btn:hover { background: #4a5568; }

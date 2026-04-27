@@ -79,13 +79,18 @@ function vmCard(v) {
     </div>`;
 }
 
+let showAll = false;
+let cachedVMs = [];
+
 function renderVMsGrouped(vms) {
+  const visible = showAll ? vms : vms.filter(v => v.status === 'running');
   const groups = new Map();
-  for (const vm of vms) {
+  for (const vm of visible) {
     const key = `${vm.cluster}/${vm.node}`;
     if (!groups.has(key)) groups.set(key, { cluster: vm.cluster, node: vm.node, vms: [] });
     groups.get(key).vms.push(vm);
   }
+  if (groups.size === 0) return '<p class="loading">No running VMs.</p>';
   return [...groups.values()].map(g => `
     <div class="node-group">
       <div class="node-group-header">
@@ -134,6 +139,7 @@ async function refresh() {
     ]);
 
     vms.sort((a, b) => a.vmid - b.vmid);
+    cachedVMs = vms;
 
     renderAlertsPanel(vms);
     document.getElementById('nodes').innerHTML = nodes.map(nodeCard).join('');
@@ -144,6 +150,12 @@ async function refresh() {
     document.getElementById('nodes').innerHTML = `<p class="error">${e.message}</p>`;
   }
 }
+
+document.getElementById('toggle-btn').addEventListener('click', () => {
+  showAll = !showAll;
+  document.getElementById('toggle-btn').textContent = showAll ? 'Running only' : 'Show all';
+  document.getElementById('vms').innerHTML = renderVMsGrouped(cachedVMs);
+});
 
 refresh();
 setInterval(refresh, 10000);
