@@ -52,3 +52,11 @@ export function evaluateVM(vm) {
 
   return { card, triggers };
 }
+
+// Remove state for vmids that no longer exist, called after every /api/vms refresh.
+export function pruneState(activeVmids) {
+  const active = new Set(activeVmids.map(String));
+  for (const id of Object.keys(state)) {
+    if (!active.has(id)) delete state[id];
+  }
+}

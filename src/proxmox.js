@@ -1,11 +1,18 @@
 import fetch from 'node-fetch';
 import https from 'https';
 
-const agent = new https.Agent({ rejectUnauthorized: false });
-
 function makeClient(host, port, tokenId, tokenSecret) {
-  const base = `https://${host}:${port}/api2/json`;
+  const base    = `https://${host}:${port}/api2/json`;
   const headers = { Authorization: `PVEAPIToken=${tokenId}=${tokenSecret}` };
+  // One agent per cluster: keepAlive reuses TLS sessions, maxSockets caps
+  // concurrent connections so parallel fetches don't open unbounded sockets.
+  const agent = new https.Agent({
+    rejectUnauthorized: false,
+    keepAlive:     true,
+    maxSockets:    10,
+    maxFreeSockets: 2,
+  });
+
   return async function api(path) {
     const res = await fetch(`${base}${path}`, { headers, agent });
     if (!res.ok) throw new Error(`Proxmox API ${res.status}: ${path}`);
@@ -14,8 +21,8 @@ function makeClient(host, port, tokenId, tokenSecret) {
   };
 }
 
-function getClusters() {
-  const clusters = [
+function buildClusters() {
+  const list = [
     {
       label: 'pve',
       api: makeClient(
@@ -28,7 +35,7 @@ function getClusters() {
   ];
 
   if (process.env.PVE2_HOST) {
-    clusters.push({
+    list.push({
       label: 'pve2',
       api: makeClient(
         process.env.PVE2_HOST,
@@ -39,8 +46,13 @@ function getClusters() {
     });
   }
 
-  return clusters;
+  return list;
 }
+
+// Built once at startup — avoids recreating closures and agents on every request.
+const clusters = buildClusters();
+
+// ─── helpers ──────────────────────────────────────────────────────────────────
 
 async function getVMIPs(c, node, vmid, type) {
   try {
@@ -101,7 +113,7 @@ async function getNodeVMs(c, n) {
   ]);
   const vms = [
     ...qemu.map(v => ({ ...v, type: 'qemu', node: n.node, cluster: c.label })),
-    ...lxc.map(v => ({ ...v, type: 'lxc', node: n.node, cluster: c.label })),
+    ...lxc.map(v => ({ ...v, type: 'lxc',  node: n.node, cluster: c.label })),
   ];
   return Promise.all(
     vms.map(async v => {
@@ -112,15 +124,11 @@ async function getNodeVMs(c, n) {
   );
 }
 
-export async function getRecentTasks(node, cluster) {
-  const c = getClusters().find(c => c.label === cluster);
-  if (!c) return [];
-  return c.api(`/nodes/${node}/tasks?limit=20`).catch(() => []);
-}
+// ─── exports ──────────────────────────────────────────────────────────────────
 
 export async function getNodes() {
   const results = await Promise.all(
-    getClusters().map(async c => {
+    clusters.map(async c => {
       const nodes = await c.api('/nodes');
       return nodes.map(n => ({ ...n, cluster: c.label }));
     })
@@ -129,14 +137,20 @@ export async function getNodes() {
 }
 
 export async function getNodeStatus(node, cluster) {
-  const c = getClusters().find(c => c.label === cluster);
+  const c = clusters.find(c => c.label === cluster);
   if (!c) throw new Error(`Unknown cluster: ${cluster}`);
   return c.api(`/nodes/${node}/status`);
 }
 
+export async function getRecentTasks(node, cluster) {
+  const c = clusters.find(c => c.label === cluster);
+  if (!c) return [];
+  return c.api(`/nodes/${node}/tasks?limit=20`).catch(() => []);
+}
+
 export async function getAllVMs() {
   const all = await Promise.all(
-    getClusters().map(async c => {
+    clusters.map(async c => {
       const nodes = await c.api('/nodes');
       const [perNode, lastBackups] = await Promise.all([
         Promise.all(nodes.map(n => getNodeVMs(c, n))),

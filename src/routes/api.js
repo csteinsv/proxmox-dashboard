@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getNodes, getNodeStatus, getAllVMs, getRecentTasks } from '../proxmox.js';
-import { evaluateVM } from '../alerts.js';
+import { evaluateVM, pruneState } from '../alerts.js';
 
 const router = Router();
 
@@ -24,6 +24,7 @@ router.get('/vms', async (req, res, next) => {
     const vms = await getAllVMs();
     vms.sort((a, b) => a.vmid - b.vmid);
     const withAlerts = vms.map(vm => ({ ...vm, alert: evaluateVM(vm) }));
+    pruneState(vms.map(v => v.vmid));
     res.json(withAlerts);
   } catch (err) {
     next(err);
