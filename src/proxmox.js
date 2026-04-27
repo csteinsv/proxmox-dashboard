@@ -42,6 +42,31 @@ function getClusters() {
   return clusters;
 }
 
+async function getVMIPs(c, node, vmid, type) {
+  try {
+    if (type === 'lxc') {
+      const ifaces = await c.api(`/nodes/${node}/lxc/${vmid}/interfaces`);
+      return ifaces
+        .filter(i => i.name !== 'lo')
+        .flatMap(i => {
+          const addrs = [];
+          if (i.inet && !i.inet.startsWith('127.')) addrs.push(i.inet.split('/')[0]);
+          return addrs;
+        });
+    } else {
+      const data = await c.api(`/nodes/${node}/qemu/${vmid}/agent/network-get-interfaces`);
+      return (data.result || [])
+        .filter(i => i.name !== 'lo')
+        .flatMap(i => (i['ip-addresses'] || [])
+          .filter(a => a['ip-address-type'] === 'ipv4' && !a['ip-address'].startsWith('127.'))
+          .map(a => a['ip-address'])
+        );
+    }
+  } catch {
+    return [];
+  }
+}
+
 export async function getNodes() {
   const results = await Promise.all(
     getClusters().map(async c => {
@@ -68,10 +93,17 @@ export async function getAllVMs() {
             c.api(`/nodes/${n.node}/qemu`).catch(() => []),
             c.api(`/nodes/${n.node}/lxc`).catch(() => []),
           ]);
-          return [
+          const vms = [
             ...qemu.map(v => ({ ...v, type: 'qemu', node: n.node, cluster: c.label })),
             ...lxc.map(v => ({ ...v, type: 'lxc', node: n.node, cluster: c.label })),
           ];
+          return Promise.all(
+            vms.map(async v => {
+              if (v.status !== 'running') return { ...v, ips: [] };
+              const ips = await getVMIPs(c, n.node, v.vmid, v.type);
+              return { ...v, ips };
+            })
+          );
         })
       );
       return perNode.flat();

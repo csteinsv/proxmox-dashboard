@@ -63,6 +63,7 @@ function vmCard(v) {
         ${metricRow('CPU', cpuPct, fmt.pct(cpuPct))}
         ${metricRow('RAM', memPct, ramVal, isBalloon ? 'neutral' : undefined)}
       </div>` : ''}
+      ${v.ips?.length ? `<div class="vm-ips">${v.ips.map(ip => `<span class="vm-ip">${ip}</span>`).join('')}</div>` : ''}
     </div>`;
 }
 
