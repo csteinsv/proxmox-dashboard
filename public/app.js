@@ -9,8 +9,8 @@ function barClass(pct) {
   return 'low';
 }
 
-function metricRow(label, pct, valStr) {
-  const cls = barClass(pct);
+function metricRow(label, pct, valStr, clsOverride) {
+  const cls = clsOverride ?? barClass(pct);
   return `
     <div class="metric-row">
       <span class="metric-label">${label}</span>
@@ -28,7 +28,10 @@ function nodeCard(n) {
     <div class="card">
       <div class="card-header">
         <div class="status-dot ${n.status === 'online' ? 'running' : 'stopped'}"></div>
-        <div><div class="card-title">${n.node}</div><div class="card-sub">Node</div></div>
+        <div>
+          <div class="card-title">${n.node}</div>
+          <div class="card-sub">Node &middot; ${n.cluster}</div>
+        </div>
       </div>
       <div class="metrics">
         ${metricRow('CPU', cpuPct, fmt.pct(cpuPct))}
@@ -38,27 +41,46 @@ function nodeCard(n) {
 }
 
 function vmCard(v) {
-  const cpuPct  = v.cpu ?? 0;
-  const memPct  = v.maxmem ? v.mem / v.maxmem : 0;
-  const memUsed = (v.mem ?? 0) / 1024 / 1024;
-  const memTot  = (v.maxmem ?? 0) / 1024 / 1024;
-  const status  = v.status ?? 'unknown';
-  const badge   = v.type === 'lxc' ? 'CT' : 'VM';
-  const alertCls = v.alert?.card ? `alert-${v.alert.card}` : '';
+  const cpuPct    = v.cpu ?? 0;
+  const isBalloon = v.maxmem > 0 && v.mem > v.maxmem;
+  const memPct    = v.maxmem ? Math.min(v.mem / v.maxmem, 1) : 0;
+  const memUsed   = Math.min(v.mem ?? 0, v.maxmem ?? 0) / 1024 / 1024;
+  const memTot    = (v.maxmem ?? 0) / 1024 / 1024;
+  const ramVal    = `${fmt.mb(memUsed)}/${fmt.mb(memTot)}${isBalloon ? ' (balloon)' : ''}`;
+  const status    = v.status ?? 'unknown';
+  const badge     = v.type === 'lxc' ? 'CT' : 'VM';
+  const alertCls  = !isBalloon && v.alert?.card ? `alert-${v.alert.card}` : '';
   return `
     <div class="card ${alertCls}">
       <div class="card-header">
         <div class="status-dot ${status}"></div>
         <div>
           <div class="card-title">${v.name ?? `${badge} ${v.vmid}`}</div>
-          <div class="card-sub">${badge} ${v.vmid} · ${status}</div>
+          <div class="card-sub">${badge} ${v.vmid} &middot; ${status}</div>
         </div>
       </div>
       ${status === 'running' ? `<div class="metrics">
         ${metricRow('CPU', cpuPct, fmt.pct(cpuPct))}
-        ${metricRow('RAM', memPct, `${fmt.mb(memUsed)}/${fmt.mb(memTot)}`)}
+        ${metricRow('RAM', memPct, ramVal, isBalloon ? 'neutral' : undefined)}
       </div>` : ''}
     </div>`;
+}
+
+function renderVMsGrouped(vms) {
+  const groups = new Map();
+  for (const vm of vms) {
+    const key = `${vm.cluster}/${vm.node}`;
+    if (!groups.has(key)) groups.set(key, { cluster: vm.cluster, node: vm.node, vms: [] });
+    groups.get(key).vms.push(vm);
+  }
+  return [...groups.values()].map(g => `
+    <div class="node-group">
+      <div class="node-group-header">
+        <span class="node-group-name">${g.node}</span>
+        <span class="node-cluster-badge">${g.cluster}</span>
+      </div>
+      <div class="card-grid">${g.vms.map(vmCard).join('')}</div>
+    </div>`).join('');
 }
 
 function renderAlertsPanel(vms) {
@@ -102,7 +124,7 @@ async function refresh() {
 
     renderAlertsPanel(vms);
     document.getElementById('nodes').innerHTML = nodes.map(nodeCard).join('');
-    document.getElementById('vms').innerHTML   = vms.map(vmCard).join('');
+    document.getElementById('vms').innerHTML   = renderVMsGrouped(vms);
     document.getElementById('last-updated').textContent =
       'Updated ' + new Date().toLocaleTimeString();
   } catch (e) {

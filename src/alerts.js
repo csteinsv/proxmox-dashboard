@@ -30,12 +30,13 @@ function worst(...levels) {
 export function evaluateVM(vm) {
   const id = String(vm.vmid);
 
-  const cpuPct  = vm.cpu ?? 0;
-  const memPct  = vm.maxmem > 0 ? vm.mem / vm.maxmem : 0;
-  const diskPct = vm.type === 'lxc' && vm.maxdisk > 0 ? vm.disk / vm.maxdisk : 0;
+  const cpuPct    = vm.cpu ?? 0;
+  const isBalloon = vm.maxmem > 0 && vm.mem > vm.maxmem;
+  const memPct    = vm.maxmem > 0 ? Math.min(vm.mem / vm.maxmem, 1) : 0;
+  const diskPct   = vm.type === 'lxc' && vm.maxdisk > 0 ? vm.disk / vm.maxdisk : 0;
 
-  const cpuElapsed  = track(id, 'cpu',  cpuPct  > 0.80);
-  const memElapsed  = track(id, 'mem',  memPct  > 0.75);
+  const cpuElapsed  = track(id, 'cpu',  cpuPct > 0.80);
+  const memElapsed  = track(id, 'mem',  !isBalloon && memPct > 0.75);
   const diskElapsed = track(id, 'disk', diskPct > 0.75);
 
   const cpuLevel  = level(cpuElapsed,  false);

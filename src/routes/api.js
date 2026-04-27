@@ -9,7 +9,7 @@ router.get('/nodes', async (req, res, next) => {
     const nodes = await getNodes();
     const withStatus = await Promise.all(
       nodes.map(async n => {
-        const status = await getNodeStatus(n.node).catch(() => ({}));
+        const status = await getNodeStatus(n.node, n.cluster).catch(() => ({}));
         return { ...n, ...status };
       })
     );
@@ -22,7 +22,6 @@ router.get('/nodes', async (req, res, next) => {
 router.get('/vms', async (req, res, next) => {
   try {
     const vms = await getAllVMs();
-    // Sort by vmid ascending — stable order, never shuffled
     vms.sort((a, b) => a.vmid - b.vmid);
     const withAlerts = vms.map(vm => ({ ...vm, alert: evaluateVM(vm) }));
     res.json(withAlerts);

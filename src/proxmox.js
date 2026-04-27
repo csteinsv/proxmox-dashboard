@@ -3,47 +3,79 @@ import https from 'https';
 
 const agent = new https.Agent({ rejectUnauthorized: false });
 
-function baseUrl() {
-  const { PROXMOX_HOST, PROXMOX_PORT } = process.env;
-  return `https://${PROXMOX_HOST}:${PROXMOX_PORT}/api2/json`;
+function makeClient(host, port, tokenId, tokenSecret) {
+  const base = `https://${host}:${port}/api2/json`;
+  const headers = { Authorization: `PVEAPIToken=${tokenId}=${tokenSecret}` };
+  return async function api(path) {
+    const res = await fetch(`${base}${path}`, { headers, agent });
+    if (!res.ok) throw new Error(`Proxmox API ${res.status}: ${path}`);
+    const { data } = await res.json();
+    return data;
+  };
 }
 
-function authHeader() {
-  const { PROXMOX_USER, PROXMOX_TOKEN_NAME, PROXMOX_TOKEN_VALUE } = process.env;
-  return { Authorization: `PVEAPIToken=${PROXMOX_USER}!${PROXMOX_TOKEN_NAME}=${PROXMOX_TOKEN_VALUE}` };
-}
+function getClusters() {
+  const clusters = [
+    {
+      label: 'pve',
+      api: makeClient(
+        process.env.PROXMOX_HOST,
+        process.env.PROXMOX_PORT || '8006',
+        `${process.env.PROXMOX_USER}!${process.env.PROXMOX_TOKEN_NAME}`,
+        process.env.PROXMOX_TOKEN_VALUE,
+      ),
+    },
+  ];
 
-async function api(path) {
-  const res = await fetch(`${baseUrl()}${path}`, {
-    headers: authHeader(),
-    agent,
-  });
-  if (!res.ok) throw new Error(`Proxmox API ${res.status}: ${path}`);
-  const { data } = await res.json();
-  return data;
+  if (process.env.PVE2_HOST) {
+    clusters.push({
+      label: 'pve2',
+      api: makeClient(
+        process.env.PVE2_HOST,
+        process.env.PVE2_PORT || '8006',
+        process.env.PVE2_TOKEN_ID,
+        process.env.PVE2_TOKEN_SECRET,
+      ),
+    });
+  }
+
+  return clusters;
 }
 
 export async function getNodes() {
-  return api('/nodes');
+  const results = await Promise.all(
+    getClusters().map(async c => {
+      const nodes = await c.api('/nodes');
+      return nodes.map(n => ({ ...n, cluster: c.label }));
+    })
+  );
+  return results.flat();
 }
 
-export async function getNodeStatus(node) {
-  return api(`/nodes/${node}/status`);
-}
-
-export async function getVMs(node) {
-  const [qemu, lxc] = await Promise.all([
-    api(`/nodes/${node}/qemu`).catch(() => []),
-    api(`/nodes/${node}/lxc`).catch(() => []),
-  ]);
-  return [
-    ...qemu.map(v => ({ ...v, type: 'qemu' })),
-    ...lxc.map(v => ({ ...v, type: 'lxc' })),
-  ];
+export async function getNodeStatus(node, cluster) {
+  const c = getClusters().find(c => c.label === cluster);
+  if (!c) throw new Error(`Unknown cluster: ${cluster}`);
+  return c.api(`/nodes/${node}/status`);
 }
 
 export async function getAllVMs() {
-  const nodes = await getNodes();
-  const results = await Promise.all(nodes.map(n => getVMs(n.node)));
-  return results.flat();
+  const all = await Promise.all(
+    getClusters().map(async c => {
+      const nodes = await c.api('/nodes');
+      const perNode = await Promise.all(
+        nodes.map(async n => {
+          const [qemu, lxc] = await Promise.all([
+            c.api(`/nodes/${n.node}/qemu`).catch(() => []),
+            c.api(`/nodes/${n.node}/lxc`).catch(() => []),
+          ]);
+          return [
+            ...qemu.map(v => ({ ...v, type: 'qemu', node: n.node, cluster: c.label })),
+            ...lxc.map(v => ({ ...v, type: 'lxc', node: n.node, cluster: c.label })),
+          ];
+        })
+      );
+      return perNode.flat();
+    })
+  );
+  return all.flat();
 }

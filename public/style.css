@@ -25,7 +25,7 @@ h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; col
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
   gap: 1rem;
 }
 
@@ -59,13 +59,14 @@ h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; col
 .metrics { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
 
 .metric-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
-.metric-label { width: 3.5rem; color: #718096; flex-shrink: 0; }
+.metric-label { width: 4.5rem; color: #718096; flex-shrink: 0; }
 .bar-track { flex: 1; height: 4px; background: #2d3748; border-radius: 2px; overflow: hidden; }
 .bar-fill  { height: 100%; border-radius: 2px; transition: width 0.3s; }
 .bar-fill.low  { background: #48bb78; }
 .bar-fill.mid  { background: #ecc94b; }
-.bar-fill.high { background: #fc8181; }
-.metric-val { width: 3rem; text-align: right; color: #a0aec0; }
+.bar-fill.high    { background: #fc8181; }
+.bar-fill.neutral { background: #4a5568; }
+.metric-val { width: 4rem; text-align: right; color: #a0aec0; }
 
 .loading { color: #718096; font-size: 0.875rem; }
 .error   { color: #fc8181; font-size: 0.875rem; }
@@ -100,3 +101,21 @@ h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; col
 }
 .alert-dot.red    { background: #fc8181; }
 .alert-dot.yellow { background: #ecc94b; }
+
+.node-group { margin-bottom: 1.5rem; }
+.node-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+.node-group-name { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #718096; }
+.node-cluster-badge {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  background: #2d3748;
+  color: #a0aec0;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+}
