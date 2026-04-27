@@ -9,6 +9,17 @@ function barClass(pct) {
   return 'low';
 }
 
+function backupBadge(ts) {
+  if (!ts) return '<div class="backup-status red">No backup</div>';
+  const ageDays = (Date.now() / 1000 - ts) / 86400;
+  let label;
+  if (ageDays < 1)      label = 'today';
+  else if (ageDays < 2) label = '1d ago';
+  else                  label = `${Math.floor(ageDays)}d ago`;
+  const cls = ageDays > 14 ? 'red' : ageDays > 7 ? 'yellow' : 'green';
+  return `<div class="backup-status ${cls}">Backed up: ${label}</div>`;
+}
+
 function metricRow(label, pct, valStr, clsOverride) {
   const cls = clsOverride ?? barClass(pct);
   return `
@@ -64,6 +75,7 @@ function vmCard(v) {
         ${metricRow('RAM', memPct, ramVal, isBalloon ? 'neutral' : undefined)}
       </div>` : ''}
       ${v.ips?.length ? `<div class="vm-ips">${v.ips.map(ip => `<span class="vm-ip">${ip}</span>`).join('')}</div>` : ''}
+      ${backupBadge(v.lastBackup)}
     </div>`;
 }
 

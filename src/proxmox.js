@@ -67,6 +67,51 @@ async function getVMIPs(c, node, vmid, type) {
   }
 }
 
+// Returns vmid (string) -> most recent backup ctime (unix seconds)
+async function getLastBackups(c, nodes) {
+  if (nodes.length === 0) return {};
+  const node = nodes[0].node;
+
+  const storages = await c.api(`/nodes/${node}/storage`).catch(() => []);
+  const backupStorages = storages.filter(s =>
+    (s.content || '').split(',').includes('backup')
+  );
+
+  const allFiles = await Promise.all(
+    backupStorages.map(s =>
+      c.api(`/nodes/${node}/storage/${s.storage}/content?content=backup`).catch(() => [])
+    )
+  );
+
+  const map = {};
+  for (const files of allFiles) {
+    for (const f of files) {
+      if (!f.vmid || !f.ctime) continue;
+      const vmid = String(f.vmid);
+      if (!map[vmid] || f.ctime > map[vmid]) map[vmid] = f.ctime;
+    }
+  }
+  return map;
+}
+
+async function getNodeVMs(c, n) {
+  const [qemu, lxc] = await Promise.all([
+    c.api(`/nodes/${n.node}/qemu`).catch(() => []),
+    c.api(`/nodes/${n.node}/lxc`).catch(() => []),
+  ]);
+  const vms = [
+    ...qemu.map(v => ({ ...v, type: 'qemu', node: n.node, cluster: c.label })),
+    ...lxc.map(v => ({ ...v, type: 'lxc', node: n.node, cluster: c.label })),
+  ];
+  return Promise.all(
+    vms.map(async v => {
+      if (v.status !== 'running') return { ...v, ips: [] };
+      const ips = await getVMIPs(c, n.node, v.vmid, v.type);
+      return { ...v, ips };
+    })
+  );
+}
+
 export async function getNodes() {
   const results = await Promise.all(
     getClusters().map(async c => {
@@ -87,26 +132,14 @@ export async function getAllVMs() {
   const all = await Promise.all(
     getClusters().map(async c => {
       const nodes = await c.api('/nodes');
-      const perNode = await Promise.all(
-        nodes.map(async n => {
-          const [qemu, lxc] = await Promise.all([
-            c.api(`/nodes/${n.node}/qemu`).catch(() => []),
-            c.api(`/nodes/${n.node}/lxc`).catch(() => []),
-          ]);
-          const vms = [
-            ...qemu.map(v => ({ ...v, type: 'qemu', node: n.node, cluster: c.label })),
-            ...lxc.map(v => ({ ...v, type: 'lxc', node: n.node, cluster: c.label })),
-          ];
-          return Promise.all(
-            vms.map(async v => {
-              if (v.status !== 'running') return { ...v, ips: [] };
-              const ips = await getVMIPs(c, n.node, v.vmid, v.type);
-              return { ...v, ips };
-            })
-          );
-        })
-      );
-      return perNode.flat();
+      const [perNode, lastBackups] = await Promise.all([
+        Promise.all(nodes.map(n => getNodeVMs(c, n))),
+        getLastBackups(c, nodes),
+      ]);
+      return perNode.flat().map(v => ({
+        ...v,
+        lastBackup: lastBackups[String(v.vmid)] ?? null,
+      }));
     })
   );
   return all.flat();

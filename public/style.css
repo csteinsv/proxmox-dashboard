@@ -122,3 +122,8 @@ h2 { font-size: 0.875rem; text-transform: uppercase; letter-spacing: 0.08em; col
 
 .vm-ips { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.6rem; }
 .vm-ip  { font-size: 0.7rem; font-family: monospace; color: #a0aec0; background: #2d3748; padding: 0.1rem 0.4rem; border-radius: 3px; }
+
+.backup-status        { font-size: 0.7rem; margin-top: 0.5rem; }
+.backup-status.green  { color: #48bb78; }
+.backup-status.yellow { color: #ecc94b; }
+.backup-status.red    { color: #fc8181; }
