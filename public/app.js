@@ -165,9 +165,9 @@ function renderLogPanel(tasks) {
 async function refresh() {
   try {
     const [nodes, vms, taskClusters] = await Promise.all([
-      fetch('/api/nodes').then(r => r.json()),
-      fetch('/api/vms').then(r => r.json()),
-      fetch('/api/tasks').then(r => r.json()),
+      fetch('/api/nodes').then(r => { if (!r.ok) throw new Error(`/api/nodes ${r.status}`); return r.json(); }),
+      fetch('/api/vms').then(r => { if (!r.ok) throw new Error(`/api/vms ${r.status}`); return r.json(); }),
+      fetch('/api/tasks').then(r => { if (!r.ok) throw new Error(`/api/tasks ${r.status}`); return r.json(); }),
     ]);
 
     vms.sort((a, b) => a.vmid - b.vmid);
